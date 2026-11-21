@@ -1,104 +1,179 @@
-# Task Management Web App - Backend
+# Full-Stack Task Management Web Application
 
-A robust REST API for a task management system, built with Spring Boot. It features JWT-based authentication, role-based access control (RBAC), and a PostgreSQL database.
+A full-stack task management web application built with a **Spring Boot** REST API backend and a modern **React (Vite)** frontend. It features JWT-based authentication, Role-Based Access Control (RBAC), server-side pagination/filtering, and a responsive user dashboard.
+
+---
+
+## 🏗️ Project Architecture & Structure
+
+```
+jv-project/
+├── backend/                  # Spring Boot REST API
+│   ├── src/
+│   │   ├── main/java/com/taskapp/
+│   │   │   ├── controller/   # REST Controllers (Auth, Task)
+│   │   │   ├── dto/          # Request & Response DTOs
+│   │   │   ├── exception/    # Global Exception Handling
+│   │   │   ├── model/        # JPA Entities (User, Task, Enums)
+│   │   │   ├── repository/   # Spring Data JPA Repositories
+│   │   │   ├── security/     # JWT Filter, UserDetailsService, SecurityConfig
+│   │   │   └── service/      # Business Logic (AuthService, TaskService)
+│   │   └── resources/        # application.properties & data.sql seed
+│   ├── docker-compose.yml    # PostgreSQL container configuration
+│   ├── pom.xml               # Maven dependencies and build setup
+│   └── .env                  # Backend environment secrets (JWT secret)
+│
+├── frontend/                 # React 19 + Vite Single-Page Application
+│   ├── src/
+│   │   ├── components/       # Reusable UI (Navbar, TaskCard, TaskForm, FilterBar, Modal, Pagination)
+│   │   ├── context/          # React Contexts (AuthContext, TaskContext)
+│   │   ├── hooks/            # Custom Hooks (useAuth, useTasks, useFetch)
+│   │   ├── pages/            # View Pages (Dashboard, Login, Register)
+│   │   ├── services/         # Axios instance & interceptors (api.js)
+│   │   └── styles/           # CSS design system & utility classes
+│   ├── package.json          # Frontend scripts & npm dependencies
+│   └── vite.config.js        # Vite configuration
+│
+└── README.md                 # Root project documentation
+```
+
+---
 
 ## 🛠 Tech Stack
 
+### Backend
 - **Java 17**
-- **Spring Boot 3.2.x** (Web, Data JPA, Security, Validation)
-- **PostgreSQL** (Database)
-- **JWT (JSON Web Tokens)** via `jjwt`
+- **Spring Boot 3.2.x** (Spring Web, Spring Security, Spring Data JPA, Spring Validation)
+- **PostgreSQL 15** (via Docker Compose)
+- **JWT (JSON Web Tokens)** via `jjwt` (0.11.5)
 - **Lombok** (Boilerplate reduction)
-- **Docker & Docker Compose** (Containerized DB)
-- **JUnit 5 & Mockito** (Unit Testing)
+- **Docker & Docker Compose** (Containerized database)
+- **JUnit 5 & Mockito** (Unit & Service testing)
 
-## ✨ Features
+### Frontend
+- **React 19**
+- **Vite** (Next-generation frontend tooling)
+- **React Router DOM v7** (Client-side routing & route guards)
+- **Axios** (HTTP client with JWT request interceptors)
+- **Modern CSS** (Design tokens, CSS variables, utility classes, and responsive layout)
+- **Oxlint** (High-performance code linting)
 
-- **Authentication & Security:**
-  - Stateless JWT token-based authentication (`SessionCreationPolicy.STATELESS`).
-  - Passwords hashed using BCrypt.
-  - JWT secret loaded securely from environment variables (`.env`).
-- **Role-Based Access Control (RBAC):**
-  - **ADMIN:** Can view, manage, assign, and delete *all* tasks.
-  - **MEMBER:** Can view, update status, and update the description of tasks assigned *only* to them.
-- **Task Assignment Logic:**
-  - On task creation (`POST`), the creator can assign the task to anyone.
-  - On task update (`PUT`), only an `ADMIN` or the original task creator can reassign a task to someone else.
-- **Robust Error Handling:**
-  - Global `@RestControllerAdvice` handling 404 Not Found, 403 Forbidden, and 400 Bad Request.
-  - Field-level validation messages for invalid payloads (`@NotBlank`, `@Email`, etc.).
-- **Performance:**
-  - Pagination and filtering (by status, priority, assignee) on the `GET /api/tasks` endpoint using Spring Data JPA `Pageable`.
+---
+
+## ✨ Key Features
+
+### 🔐 Authentication & Security
+- **Stateless JWT Authentication:** Secure login and registration with token-based session management.
+- **Password Hashing:** Passwords hashed securely using BCrypt.
+- **Client-Side Token Handling:** In-memory token storage with automatic `Authorization: Bearer <token>` injection via Axios interceptors.
+- **Protected Routing:** Unauthenticated users are redirected to `/login`, while authenticated sessions navigate to `/`.
+
+### 👥 Role-Based Access Control (RBAC)
+- **`ADMIN`:** Full privileges to view, create, edit, reassign, and delete any task across the workspace.
+- **`MEMBER`:** Can view tasks, create tasks, and update tasks. If a task is assigned to a member, they can update its status and description; reassignment is restricted to admins and the task creator.
+
+### 📋 Task Management & Workflow
+- **Task Lifecycle:** Manage tasks with title, description, status (`TODO`, `IN_PROGRESS`, `DONE`), priority (`LOW`, `MEDIUM`, `HIGH`), due date, and assignee.
+- **Filtering & Pagination:** Filter tasks dynamically by status, priority, or assignee ID with server-side pagination (`Pageable`).
+- **Interactive UI:** Dynamic modal forms for creating and editing tasks, deletion confirmation, status badges, and loading skeleton states.
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- JDK 17
-- Maven
-- Docker (for spinning up the local PostgreSQL database)
+Make sure you have the following installed on your machine:
+- **JDK 17+**
+- **Maven 3.8+**
+- **Node.js 18+** & **npm**
+- **Docker & Docker Compose**
 
-### 1. Configure the Environment
-A `.env` file is located inside the `backend/` directory to store sensitive environment variables (it is ignored by git). It contains the JWT Secret:
-```properties
-JWT_SECRET=this-is-a-super-secret-key-that-should-be-at-least-256-bits-long-in-production-environments-for-jwt-signing
-```
+---
 
-### 2. Start the Database
-Navigate to the `backend/` directory and spin up the local PostgreSQL instance using Docker Compose:
-```bash
-cd backend
-docker-compose up -d
-```
-*This exposes PostgreSQL on `localhost:5432` with username `postgres` and password `postgrespassword`.*
+### Step 1: Backend Configuration
 
-### 3. Run the Application
-Start the Spring Boot server using Maven:
-```bash
-cd backend
-mvn spring-boot:run
-```
-*The API will start on `http://localhost:8080`.*
+1. Check the `.env` file inside the `backend/` folder:
+   ```properties
+   JWT_SECRET=this-is-a-super-secret-key-that-should-be-at-least-256-bits-long-in-production-environments-for-jwt-signing
+   ```
 
-### 4. Database Seeding (Testing Data)
-The application is configured to automatically run `data.sql` on startup, seeding the database with dummy users and tasks for immediate testing. 
+2. Start the PostgreSQL database container:
+   ```bash
+   cd backend
+   docker-compose up -d
+   ```
+   *PostgreSQL will be running on `localhost:5432` with database `taskdb`.*
 
-**Pre-configured Users:**
-- **Admin**: `admin@test.com` | password: `password`
-- **Member**: `member@test.com` | password: `password`
+3. Run the Spring Boot backend:
+   ```bash
+   cd backend
+   mvn spring-boot:run
+   ```
+   *The backend REST API starts on `http://localhost:8080`.*
 
-### 5. Start the React Frontend
-Open a new terminal window, navigate to the `frontend` directory, and start the Vite development server:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-*The frontend expects the backend to be running on `http://localhost:8080`.*
+---
 
-## 📡 API Endpoints
+### Step 2: Database Seeding & Default Credentials
 
-### Auth
-| Method | Endpoint | Description |
+On startup, `backend/src/main/resources/data.sql` seeds the database with initial users and tasks for immediate testing:
+
+| Role | Email | Password |
 | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | Register a new member |
-| `POST` | `/api/auth/login` | Authenticate and retrieve JWT token |
+| **Admin** | `admin@test.com` | `password` |
+| **Member** | `member@test.com` | `password` |
 
-### Tasks (Requires Bearer Token)
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/tasks` | Get paginated & filtered tasks `?page=0&size=10&status=TODO` |
-| `GET` | `/api/tasks/{id}` | Get a specific task |
-| `POST` | `/api/tasks` | Create a new task (Creator can assign) |
-| `PUT` | `/api/tasks/{id}` | Update task (ADMIN/Creator can reassign) |
-| `DELETE` | `/api/tasks/{id}` | Delete task (ADMIN/Creator only) |
+---
 
-## 🧪 Testing
-The project includes a suite of unit tests for the `TaskService` validating the business logic and RBAC constraints. 
-Navigate to the `backend/` directory and run the tests using:
+### Step 3: Frontend Setup
+
+Open a new terminal window:
+
+1. Navigate to the `frontend/` directory and install dependencies:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. Start the Vite development server:
+   ```bash
+   npm run dev
+   ```
+   *The application will open on `http://localhost:5173` (or the port displayed in your terminal).*
+
+---
+
+## 📡 REST API Endpoints
+
+### Authentication (`/api/auth`)
+| Method | Endpoint | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/register` | Register a new user account | Public |
+| `POST` | `/api/auth/login` | Log in and receive a JWT Bearer token | Public |
+
+### Tasks (`/api/tasks`)
+| Method | Endpoint | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/tasks` | Get paginated tasks (supports `?page=0&size=10&status=TODO&priority=HIGH&assignedToId=1`) | Authenticated |
+| `GET` | `/api/tasks/{id}` | Retrieve details for a specific task | Authenticated |
+| `POST` | `/api/tasks` | Create a new task (creator can assign) | Authenticated |
+| `PUT` | `/api/tasks/{id}` | Update task details (Admin / Creator can reassign; Assignee can update status/desc) | Authenticated |
+| `DELETE` | `/api/tasks/{id}` | Delete a task | Admin or Creator |
+
+---
+
+## 🧪 Testing & Quality Checks
+
+### Backend Unit Tests
+Run the Spring Boot / Mockito unit test suite:
 ```bash
 cd backend
 mvn test
 ```
 
-## 📸 Screenshots & API Testing
-*(Placeholder for UI screenshots and Postman collections once the frontend is built)*
+### Frontend Lint & Build
+Run the frontend linter and production build:
+```bash
+cd frontend
+npm run lint
+npm run build
+```
