@@ -1,6 +1,6 @@
 # Full-Stack Task Management Web Application
 
-A production-ready full-stack task management web application built with a **Spring Boot** REST API backend and a modern **React (Vite)** frontend. It features JWT-based authentication, Role-Based Access Control (RBAC), server-side pagination & filtering, Swagger/OpenAPI documentation, and a responsive user dashboard.
+A production-ready full-stack task management web application built with a **Spring Boot** REST API backend and a modern **React (Vite)** frontend. It features JWT-based authentication, Role-Based Access Control (RBAC), server-side pagination & filtering, Swagger/OpenAPI documentation, Flyway database migrations, integration testing with Testcontainers, and a responsive user dashboard.
 
 ---
 
@@ -13,14 +13,16 @@ jv-project/
 │   │   ├── main/java/com/taskapp/
 │   │   │   ├── config/       # OpenAPI & Swagger Configuration
 │   │   │   ├── controller/   # REST Controllers (Auth, Task)
-│   │   │   ├── dto/          # Request & Response DTOs
+│   │   │   ├── dto/          # Request & Response DTOs (TaskRequest, TaskPatchRequest)
 │   │   │   ├── exception/    # Global Exception Handling & Logging
 │   │   │   ├── model/        # JPA Entities (User, Task, Enums)
 │   │   │   ├── repository/   # Spring Data JPA Repositories
 │   │   │   ├── security/     # JWT Filter, UserDetailsService, SecurityConfig
 │   │   │   └── service/      # Business Logic (AuthService, TaskService)
-│   │   ├── main/resources/   # application.properties & data.sql seed
-│   │   └── test/             # JUnit 5 & Mockito test suite
+│   │   ├── main/resources/
+│   │   │   ├── db/migration/ # Flyway SQL Migration Scripts (V1, V2)
+│   │   │   └── application.properties
+│   │   └── test/             # JUnit 5, Mockito, JPA & Testcontainers test suite
 │   ├── docker-compose.yml    # PostgreSQL container configuration
 │   ├── pom.xml               # Maven dependencies and build setup
 │   ├── .env                  # Local environment configuration
@@ -32,8 +34,10 @@ jv-project/
 │   │   ├── context/          # React Contexts (AuthContext, TaskContext)
 │   │   ├── hooks/            # Custom Hooks (useAuth, useTasks, useFetch)
 │   │   ├── pages/            # View Pages (Dashboard, Login, Register)
-│   │   ├── services/         # Axios instance & interceptors (api.js)
+│   │   ├── services/         # Axios instance with VITE_API_BASE_URL & interceptors
 │   │   └── styles/           # CSS design system & utility classes
+│   ├── .env                  # Local frontend environment config
+│   ├── .env.example          # Template for frontend environment config
 │   ├── package.json          # Frontend scripts & npm dependencies
 │   └── vite.config.js        # Vite configuration
 │
@@ -49,17 +53,18 @@ jv-project/
 - **Java 17**
 - **Spring Boot 3.2.x** (Spring Web, Spring Security, Spring Data JPA, Spring Validation)
 - **PostgreSQL 15** (via Docker Compose)
+- **Flyway** (Versioned database migrations)
 - **SpringDoc OpenAPI 2.3.x / Swagger UI** (Interactive API documentation)
 - **JWT (JSON Web Tokens)** via `jjwt` (0.11.5)
 - **Lombok & SLF4J** (Boilerplate reduction & server-side logging)
-- **Docker & Docker Compose** (Containerized database)
-- **JUnit 5 & Mockito** (Unit, Service & Controller testing)
+- **JUnit 5, Mockito & H2** (Unit & JPA testing)
+- **Testcontainers** (PostgreSQL container integration testing)
 
 ### Frontend
 - **React 19**
-- **Vite** (Fast dev server and optimized Rollup bundler)
+- **Vite** (Next-generation frontend tooling with environment variables)
 - **React Router DOM v7** (Client-side routing & route guards)
-- **Axios** (HTTP client with JWT request interceptors)
+- **Axios** (Configured HTTP client with JWT request interceptors)
 - **Modern CSS** (Design tokens, CSS variables, utility classes, and responsive layout)
 - **Oxlint** (High-performance code linting)
 
@@ -81,14 +86,21 @@ jv-project/
   - Restricted: Changing `title`, `priority`, `dueDate`, or `assignedTo` is forbidden and rejected with HTTP 403 Forbidden.
 - **Reassignment & Deletion:** Restricted strictly to `ADMIN` and the original task creator.
 
+### 📝 Partial Updates (`PATCH` API Design)
+- Dedicated `PATCH /api/tasks/{id}` endpoint accepting `TaskPatchRequest`.
+- Assignees can conveniently update only `status` or `description` without being forced to send existing unchanged required fields like `title` and `priority`.
+
+### 🗄️ Database Migrations with Flyway
+- Schema changes and seed records are managed via Flyway migration scripts in `backend/src/main/resources/db/migration/`:
+  - `V1__init_schema.sql`: Sets up tables (`users`, `tasks`), foreign keys, and indexes.
+  - `V2__seed_initial_data.sql`: Idempotent seeding using `ON CONFLICT (email) DO NOTHING` and `NOT EXISTS`.
+- Production-grade schema validation (`spring.jpa.hibernate.ddl-auto=validate`).
+
 ### 🛡️ Defensive Error Handling & Input Validation
 - **Exception Masking:** Unhandled internal server exceptions return generic error responses (`500 Internal Server Error`) to clients while logging full stack traces on the server.
 - **Pagination Validation:** Endpoint parameters are strictly validated:
   - `page` must be `>= 0` (negative page index returns HTTP 400 Bad Request).
   - `size` must be between `1` and `100` (prevents memory exhaustion and returns HTTP 400 Bad Request).
-
-### 🔄 Idempotent Database Seeding
-- `data.sql` utilizes `ON CONFLICT (email) DO NOTHING` for users and `NOT EXISTS` checks for tasks, preventing duplicate key errors on application restarts.
 
 ---
 
@@ -130,13 +142,13 @@ Make sure you have the following installed on your machine:
    cd backend
    mvn spring-boot:run
    ```
-   *The backend REST API starts on `http://localhost:8080`.*
+   *Flyway will automatically run migrations and start the backend on `http://localhost:8080`.*
 
 ---
 
 ### Step 2: Database Seeding & Default Credentials
 
-On startup, `backend/src/main/resources/data.sql` automatically seeds the database with initial users and tasks for immediate testing:
+Flyway automatically seeds the initial test users and tasks:
 
 | Role | Email | Password |
 | :--- | :--- | :--- |
@@ -149,13 +161,18 @@ On startup, `backend/src/main/resources/data.sql` automatically seeds the databa
 
 Open a new terminal window:
 
-1. Navigate to the `frontend/` directory and install dependencies:
+1. Configure `.env` in `frontend/` (refer to `frontend/.env.example`):
+   ```properties
+   VITE_API_BASE_URL=http://localhost:8080/api
+   ```
+
+2. Install dependencies:
    ```bash
    cd frontend
    npm install
    ```
 
-2. Start the Vite development server:
+3. Start the Vite development server:
    ```bash
    npm run dev
    ```
@@ -165,7 +182,7 @@ Open a new terminal window:
 
 ## 📖 Swagger / OpenAPI Documentation
 
-Once the backend is running, access the interactive Swagger UI documentation at:
+Interactive Swagger documentation is available once the backend is started:
 - **Swagger UI:** [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 - **OpenAPI JSON Docs:** [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
 
@@ -185,15 +202,16 @@ Once the backend is running, access the interactive Swagger UI documentation at:
 | `GET` | `/api/tasks` | Get paginated tasks (`?page=0&size=10&status=TODO&priority=HIGH&assignedToId=1`) | Authenticated |
 | `GET` | `/api/tasks/{id}` | Retrieve details for a specific task | Assignee, Creator, or Admin |
 | `POST` | `/api/tasks` | Create a new task (creator can assign) | Authenticated |
-| `PUT` | `/api/tasks/{id}` | Update task details | Assignee (status/desc), Creator/Admin (all fields) |
+| `PUT` | `/api/tasks/{id}` | Full update of existing task | Assignee (status/desc), Creator/Admin (all fields) |
+| `PATCH` | `/api/tasks/{id}` | Partial update of task (e.g. status or description only) | Assignee (status/desc), Creator/Admin (all fields) |
 | `DELETE` | `/api/tasks/{id}` | Delete a task | Admin or Creator |
 
 ---
 
 ## 🧪 Testing & Quality Checks
 
-### Backend Unit & Controller Tests
-Run the comprehensive 20-test suite:
+### Backend Unit & Integration Tests
+Run the complete test suite (unit, JPA integration, and Testcontainers):
 ```bash
 cd backend
 mvn test

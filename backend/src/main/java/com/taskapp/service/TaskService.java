@@ -1,5 +1,6 @@
 package com.taskapp.service;
 
+import com.taskapp.dto.TaskPatchRequest;
 import com.taskapp.dto.TaskRequest;
 import com.taskapp.dto.TaskResponse;
 import com.taskapp.dto.UserSummaryResponse;
@@ -110,6 +111,65 @@ public class TaskService {
             task.setStatus(request.getStatus());
             task.setPriority(request.getPriority());
             task.setDueDate(request.getDueDate());
+        }
+
+        return mapToResponse(taskRepository.save(task));
+    }
+
+    public TaskResponse patchTask(Long id, TaskPatchRequest request, User currentUser) {
+        Task task = getTaskEntity(id);
+
+        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
+        boolean isCreator = task.getCreatedBy() != null && task.getCreatedBy().getId().equals(currentUser.getId());
+        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUser.getId());
+
+        if (!isAdmin && !isCreator && !isAssignee) {
+            throw new AccessDeniedException("You do not have permission to update this task");
+        }
+
+        // Reassignment logic
+        if (request.getAssignedToId() != null && !Objects.equals(task.getAssignedTo() != null ? task.getAssignedTo().getId() : null, request.getAssignedToId())) {
+            if (!isAdmin && !isCreator) {
+                throw new AccessDeniedException("Only ADMIN or the creator can reassign a task");
+            }
+            User newAssignee = userRepository.findById(request.getAssignedToId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Assignee not found"));
+            task.setAssignedTo(newAssignee);
+        }
+
+        // Field modifications
+        if (!isAdmin && !isCreator) {
+            if (request.getTitle() != null && !Objects.equals(task.getTitle(), request.getTitle())) {
+                throw new AccessDeniedException("Assignees cannot update task title");
+            }
+            if (request.getPriority() != null && !Objects.equals(task.getPriority(), request.getPriority())) {
+                throw new AccessDeniedException("Assignees cannot update task priority");
+            }
+            if (request.getDueDate() != null && !Objects.equals(task.getDueDate(), request.getDueDate())) {
+                throw new AccessDeniedException("Assignees cannot update task due date");
+            }
+            if (request.getStatus() != null) {
+                task.setStatus(request.getStatus());
+            }
+            if (request.getDescription() != null) {
+                task.setDescription(request.getDescription());
+            }
+        } else {
+            if (request.getTitle() != null) {
+                task.setTitle(request.getTitle());
+            }
+            if (request.getDescription() != null) {
+                task.setDescription(request.getDescription());
+            }
+            if (request.getStatus() != null) {
+                task.setStatus(request.getStatus());
+            }
+            if (request.getPriority() != null) {
+                task.setPriority(request.getPriority());
+            }
+            if (request.getDueDate() != null) {
+                task.setDueDate(request.getDueDate());
+            }
         }
 
         return mapToResponse(taskRepository.save(task));

@@ -25,7 +25,7 @@ export const TaskProvider = ({ children }) => {
       });
       setTasks(data.content || []);
       setTotalPages(data.totalPages || 0);
-    } catch (err) {
+    } catch {
       // error is handled by useFetch
     }
   }, [request]);
@@ -36,8 +36,6 @@ export const TaskProvider = ({ children }) => {
       method: 'POST',
       data: taskData
     });
-    // Optimistic append, but usually a re-fetch is better for pagination.
-    // We'll let the component caller decide if they want to re-fetch.
     return data;
   }, [request]);
 
@@ -47,7 +45,16 @@ export const TaskProvider = ({ children }) => {
       method: 'PUT',
       data: taskData
     });
-    // Update local state to avoid full refetch
+    setTasks(prev => prev.map(t => t.id === id ? data : t));
+    return data;
+  }, [request]);
+
+  const patchTask = useCallback(async (id, patchData) => {
+    const data = await request({
+      url: `/tasks/${id}`,
+      method: 'PATCH',
+      data: patchData
+    });
     setTasks(prev => prev.map(t => t.id === id ? data : t));
     return data;
   }, [request]);
@@ -69,8 +76,9 @@ export const TaskProvider = ({ children }) => {
     fetchTasks,
     createTask,
     updateTask,
+    patchTask,
     deleteTask
-  }), [tasks, totalPages, loading, error, setError, fetchTasks, createTask, updateTask, deleteTask]);
+  }), [tasks, totalPages, loading, error, setError, fetchTasks, createTask, updateTask, patchTask, deleteTask]);
 
   return (
     <TaskContext.Provider value={value}>

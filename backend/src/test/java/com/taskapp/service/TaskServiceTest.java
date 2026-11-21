@@ -1,5 +1,6 @@
 package com.taskapp.service;
 
+import com.taskapp.dto.TaskPatchRequest;
 import com.taskapp.dto.TaskRequest;
 import com.taskapp.dto.TaskResponse;
 import com.taskapp.model.Role;
@@ -219,6 +220,35 @@ class TaskServiceTest {
         assertEquals(TaskStatus.DONE, response.getStatus());
         assertEquals(TaskPriority.LOW, response.getPriority());
         assertEquals(member2.getId(), response.getAssignedTo().getId());
+    }
+
+    @Test
+    void patchTask_AssigneeCanPatchOnlyStatusAndDescriptionWithoutOtherFields() {
+        TaskPatchRequest patch = TaskPatchRequest.builder()
+                .status(TaskStatus.DONE)
+                .description("Patched description")
+                .build();
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponse response = taskService.patchTask(100L, patch, member1);
+
+        assertEquals(TaskStatus.DONE, response.getStatus());
+        assertEquals("Patched description", response.getDescription());
+        assertEquals("Task 1", response.getTitle()); // unchanged
+        assertEquals(TaskPriority.HIGH, response.getPriority()); // unchanged
+    }
+
+    @Test
+    void patchTask_AssigneeCannotPatchPriority() {
+        TaskPatchRequest patch = TaskPatchRequest.builder()
+                .priority(TaskPriority.LOW)
+                .build();
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+
+        assertThrows(AccessDeniedException.class, () -> taskService.patchTask(100L, patch, member1));
     }
 
     @Test

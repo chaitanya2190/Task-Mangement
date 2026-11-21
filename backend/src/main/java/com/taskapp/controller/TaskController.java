@@ -1,5 +1,6 @@
 package com.taskapp.controller;
 
+import com.taskapp.dto.TaskPatchRequest;
 import com.taskapp.dto.TaskRequest;
 import com.taskapp.dto.TaskResponse;
 import com.taskapp.model.TaskPriority;
@@ -63,7 +64,7 @@ public class TaskController {
         return ResponseEntity.ok(taskService.createTask(request, currentUser));
     }
 
-    @Operation(summary = "Update an existing task")
+    @Operation(summary = "Fully update an existing task")
     @PutMapping("/{id}")
     public ResponseEntity<TaskResponse> updateTask(
             @PathVariable Long id,
@@ -71,6 +72,16 @@ public class TaskController {
             @AuthenticationPrincipal User currentUser
     ) {
         return ResponseEntity.ok(taskService.updateTask(id, request, currentUser));
+    }
+
+    @Operation(summary = "Partially update an existing task (e.g. status or description)")
+    @PatchMapping("/{id}")
+    public ResponseEntity<TaskResponse> patchTask(
+            @PathVariable Long id,
+            @RequestBody TaskPatchRequest request,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        return ResponseEntity.ok(taskService.patchTask(id, request, currentUser));
     }
 
     @Operation(summary = "Delete a task")

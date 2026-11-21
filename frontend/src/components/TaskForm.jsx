@@ -4,7 +4,7 @@ import { TaskContext } from '../context/TaskContext';
 
 const TaskForm = ({ initialTask, onClose }) => {
   const { user } = useAuth();
-  const { createTask, updateTask } = useContext(TaskContext);
+  const { createTask, updateTask, patchTask } = useContext(TaskContext);
   
   const isEdit = !!initialTask;
   
@@ -38,16 +38,29 @@ const TaskForm = ({ initialTask, onClose }) => {
     setLoading(true);
     setError('');
 
-    const payload = {
-      ...formData,
-      assignedToId: formData.assignedToId ? parseInt(formData.assignedToId) : null,
-      dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null
-    };
-
     try {
       if (isEdit) {
-        await updateTask(initialTask.id, payload);
+        if (pureAssignee) {
+          // Use PATCH for partial update (status and description only)
+          await patchTask(initialTask.id, {
+            status: formData.status,
+            description: formData.description
+          });
+        } else {
+          // Admin or Creator full update
+          const payload = {
+            ...formData,
+            assignedToId: formData.assignedToId ? parseInt(formData.assignedToId) : null,
+            dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null
+          };
+          await updateTask(initialTask.id, payload);
+        }
       } else {
+        const payload = {
+          ...formData,
+          assignedToId: formData.assignedToId ? parseInt(formData.assignedToId) : null,
+          dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null
+        };
         await createTask(payload);
       }
       onClose(); // Close modal on success
@@ -126,7 +139,7 @@ const TaskForm = ({ initialTask, onClose }) => {
             name="dueDate" 
             className="form-input" 
             value={formData.dueDate} 
-            onChange={handleChange}
+            onChange={handleChange} 
             disabled={pureAssignee}
           />
         </div>
@@ -138,7 +151,7 @@ const TaskForm = ({ initialTask, onClose }) => {
             name="assignedToId" 
             className="form-input" 
             value={formData.assignedToId} 
-            onChange={handleChange}
+            onChange={handleChange} 
             disabled={pureAssignee && !isAdmin && !isCreator} // Only Admin/Creator can reassign
           />
         </div>
