@@ -5,10 +5,12 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
@@ -20,6 +22,20 @@ public class JwtService {
 
     @Value("${jwt.secret}")
     private String secretKey;
+
+    @PostConstruct
+    public void validateSecret() {
+        if (secretKey == null || secretKey.trim().isEmpty()) {
+            throw new IllegalStateException("JWT_SECRET environment variable is missing or empty.");
+        }
+        if (secretKey.contains("fallback") || secretKey.contains("change-me")) {
+            throw new IllegalStateException("Insecure JWT_SECRET detected. Please provide a secure production secret.");
+        }
+        byte[] keyBytes = getSecretBytes();
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException("JWT_SECRET must be at least 256 bits (32 bytes) long.");
+        }
+    }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -67,8 +83,16 @@ public class JwtService {
                 .getBody();
     }
 
+    private byte[] getSecretBytes() {
+        try {
+            return Decoders.BASE64.decode(secretKey);
+        } catch (Exception e) {
+            return secretKey.getBytes(StandardCharsets.UTF_8);
+        }
+    }
+
     private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        byte[] keyBytes = getSecretBytes();
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }

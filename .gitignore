@@ -1,0 +1,21 @@
+# Dependencies & Build artifacts
+target/
+**/target/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Environment Secrets
+.env
+**/.env
+.env.local
+
+# IDEs & System
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+Thumbs.db

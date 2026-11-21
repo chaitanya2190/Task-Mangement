@@ -44,6 +44,7 @@ class TaskServiceTest {
     private User member1;
     private User member2;
     private Task task1;
+    private Task taskCreatedByMember1;
 
     @BeforeEach
     void setUp() {
@@ -57,31 +58,53 @@ class TaskServiceTest {
                 .description("Desc 1")
                 .status(TaskStatus.TODO)
                 .priority(TaskPriority.HIGH)
+                .dueDate(LocalDateTime.of(2026, 12, 1, 10, 0))
                 .assignedTo(member1)
                 .createdBy(admin)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        taskCreatedByMember1 = Task.builder()
+                .id(101L)
+                .title("Created by Member 1")
+                .description("Assigned to Member 2")
+                .status(TaskStatus.IN_PROGRESS)
+                .priority(TaskPriority.MEDIUM)
+                .assignedTo(member2)
+                .createdBy(member1)
                 .createdAt(LocalDateTime.now())
                 .build();
     }
 
     @Test
-    void getAllTasks_MemberForcedToSeeOnlyOwnTasks() {
+    void getAllTasks_MemberScopedToOwnOrCreatedTasks() {
         PageRequest pageRequest = PageRequest.of(0, 10);
-        when(taskRepository.findAllFiltered(null, null, member1.getId(), pageRequest))
+        when(taskRepository.findAllFiltered(null, null, null, member1.getId(), pageRequest))
                 .thenReturn(new PageImpl<>(List.of(task1)));
 
-        // Requesting with assignedToId = 999 should be overridden by member1.getId() (2L)
-        Page<TaskResponse> result = taskService.getAllTasks(null, null, 999L, pageRequest, member1);
+        Page<TaskResponse> result = taskService.getAllTasks(null, null, null, pageRequest, member1);
 
         assertEquals(1, result.getTotalElements());
-        verify(taskRepository).findAllFiltered(null, null, member1.getId(), pageRequest);
+        verify(taskRepository).findAllFiltered(null, null, null, member1.getId(), pageRequest);
     }
 
     @Test
-    void getTaskById_MemberCannotViewOtherUsersTask() {
+    void getTaskById_MemberCannotViewUnrelatedTask() {
         when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
 
-        // member2 tries to view task1 (assigned to member1)
+        // member2 is neither assignee (member1) nor creator (admin)
         assertThrows(AccessDeniedException.class, () -> taskService.getTaskById(100L, member2));
+    }
+
+    @Test
+    void getTaskById_CreatorCanViewTaskEvenIfAssignedToSomeoneElse() {
+        when(taskRepository.findById(101L)).thenReturn(Optional.of(taskCreatedByMember1));
+
+        // member1 created task101, which is assigned to member2
+        TaskResponse response = taskService.getTaskById(101L, member1);
+
+        assertNotNull(response);
+        assertEquals(101L, response.getId());
     }
 
     @Test
@@ -100,24 +123,13 @@ class TaskServiceTest {
     }
 
     @Test
-    void updateTask_MemberCannotReassignTask() {
+    void updateTask_AssigneeCanUpdateStatusAndDescription() {
         TaskRequest request = new TaskRequest();
-        request.setAssignedToId(member2.getId()); // Trying to reassign to member2
-
-        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
-
-        // task1 is assigned to member1. member1 tries to reassign it.
-        AccessDeniedException exception = assertThrows(AccessDeniedException.class, 
-                () -> taskService.updateTask(100L, request, member1));
-        
-        assertTrue(exception.getMessage().contains("Only ADMIN or the creator can reassign"));
-    }
-
-    @Test
-    void updateTask_MemberCanUpdateStatusOfOwnTask() {
-        TaskRequest request = new TaskRequest();
+        request.setTitle(task1.getTitle()); // unchanged
+        request.setDescription("Updated description");
         request.setStatus(TaskStatus.DONE);
-        request.setPriority(TaskPriority.LOW);
+        request.setPriority(task1.getPriority()); // unchanged
+        request.setDueDate(task1.getDueDate()); // unchanged
 
         when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
         when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -125,7 +137,88 @@ class TaskServiceTest {
         TaskResponse response = taskService.updateTask(100L, request, member1);
 
         assertEquals(TaskStatus.DONE, response.getStatus());
+        assertEquals("Updated description", response.getDescription());
+        assertEquals(TaskPriority.HIGH, response.getPriority());
+    }
+
+    @Test
+    void updateTask_AssigneeCannotUpdateTitle() {
+        TaskRequest request = new TaskRequest();
+        request.setTitle("New Unauthorized Title");
+        request.setStatus(TaskStatus.DONE);
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+
+        AccessDeniedException exception = assertThrows(AccessDeniedException.class,
+                () -> taskService.updateTask(100L, request, member1));
+
+        assertTrue(exception.getMessage().contains("Assignees cannot update task title"));
+    }
+
+    @Test
+    void updateTask_AssigneeCannotUpdatePriority() {
+        TaskRequest request = new TaskRequest();
+        request.setTitle(task1.getTitle());
+        request.setPriority(TaskPriority.LOW); // trying to change priority from HIGH to LOW
+        request.setStatus(TaskStatus.IN_PROGRESS);
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+
+        AccessDeniedException exception = assertThrows(AccessDeniedException.class,
+                () -> taskService.updateTask(100L, request, member1));
+
+        assertTrue(exception.getMessage().contains("Assignees cannot update task priority"));
+    }
+
+    @Test
+    void updateTask_AssigneeCannotUpdateDueDate() {
+        TaskRequest request = new TaskRequest();
+        request.setTitle(task1.getTitle());
+        request.setPriority(task1.getPriority());
+        request.setDueDate(LocalDateTime.of(2027, 1, 1, 0, 0)); // changed due date
+        request.setStatus(TaskStatus.IN_PROGRESS);
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+
+        AccessDeniedException exception = assertThrows(AccessDeniedException.class,
+                () -> taskService.updateTask(100L, request, member1));
+
+        assertTrue(exception.getMessage().contains("Assignees cannot update task due date"));
+    }
+
+    @Test
+    void updateTask_MemberCannotReassignTask() {
+        TaskRequest request = new TaskRequest();
+        request.setAssignedToId(member2.getId()); // Trying to reassign to member2
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+
+        AccessDeniedException exception = assertThrows(AccessDeniedException.class, 
+                () -> taskService.updateTask(100L, request, member1));
+        
+        assertTrue(exception.getMessage().contains("Only ADMIN or the creator can reassign"));
+    }
+
+    @Test
+    void updateTask_AdminCanUpdateAllFieldsAndReassign() {
+        TaskRequest request = new TaskRequest();
+        request.setTitle("Admin Updated Title");
+        request.setDescription("Admin Updated Desc");
+        request.setStatus(TaskStatus.DONE);
+        request.setPriority(TaskPriority.LOW);
+        request.setAssignedToId(member2.getId());
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+        when(userRepository.findById(member2.getId())).thenReturn(Optional.of(member2));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponse response = taskService.updateTask(100L, request, admin);
+
+        assertEquals("Admin Updated Title", response.getTitle());
+        assertEquals("Admin Updated Desc", response.getDescription());
+        assertEquals(TaskStatus.DONE, response.getStatus());
         assertEquals(TaskPriority.LOW, response.getPriority());
+        assertEquals(member2.getId(), response.getAssignedTo().getId());
     }
 
     @Test
@@ -133,10 +226,18 @@ class TaskServiceTest {
         when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
 
         // task1 was created by admin, assigned to member1
-        // member1 tries to delete it
         AccessDeniedException exception = assertThrows(AccessDeniedException.class, 
                 () -> taskService.deleteTask(100L, member1));
         
         assertTrue(exception.getMessage().contains("Only ADMIN or the creator can delete"));
+    }
+
+    @Test
+    void deleteTask_CreatorCanDeleteOwnTask() {
+        when(taskRepository.findById(101L)).thenReturn(Optional.of(taskCreatedByMember1));
+        doNothing().when(taskRepository).delete(taskCreatedByMember1);
+
+        assertDoesNotThrow(() -> taskService.deleteTask(101L, member1));
+        verify(taskRepository).delete(taskCreatedByMember1);
     }
 }

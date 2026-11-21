@@ -27,19 +27,23 @@ public class TaskService {
     private final UserRepository userRepository;
 
     public Page<TaskResponse> getAllTasks(TaskStatus status, TaskPriority priority, Long assignedToId, Pageable pageable, User currentUser) {
+        Long memberId = null;
         if (currentUser.getRole() == Role.MEMBER) {
-            assignedToId = currentUser.getId(); // Force filter to only show their own tasks
+            memberId = currentUser.getId(); // Scope to tasks assigned to or created by this member
         }
         
-        return taskRepository.findAllFiltered(status, priority, assignedToId, pageable)
+        return taskRepository.findAllFiltered(status, priority, assignedToId, memberId, pageable)
                 .map(this::mapToResponse);
     }
 
     public TaskResponse getTaskById(Long id, User currentUser) {
         Task task = getTaskEntity(id);
         
-        if (currentUser.getRole() == Role.MEMBER && !task.getAssignedTo().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("You can only view your own tasks");
+        boolean isCreator = task.getCreatedBy() != null && task.getCreatedBy().getId().equals(currentUser.getId());
+        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUser.getId());
+
+        if (currentUser.getRole() == Role.MEMBER && !isAssignee && !isCreator) {
+            throw new AccessDeniedException("You can only view tasks assigned to you or created by you");
         }
         
         return mapToResponse(task);
@@ -70,15 +74,15 @@ public class TaskService {
         Task task = getTaskEntity(id);
 
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
-        boolean isCreator = task.getCreatedBy().getId().equals(currentUser.getId());
-        boolean isAssignee = task.getAssignedTo().getId().equals(currentUser.getId());
+        boolean isCreator = task.getCreatedBy() != null && task.getCreatedBy().getId().equals(currentUser.getId());
+        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUser.getId());
 
         if (!isAdmin && !isCreator && !isAssignee) {
             throw new AccessDeniedException("You do not have permission to update this task");
         }
 
         // Reassignment logic: Only ADMIN or creator can change assignedTo
-        if (request.getAssignedToId() != null && !Objects.equals(task.getAssignedTo().getId(), request.getAssignedToId())) {
+        if (request.getAssignedToId() != null && !Objects.equals(task.getAssignedTo() != null ? task.getAssignedTo().getId() : null, request.getAssignedToId())) {
             if (!isAdmin && !isCreator) {
                 throw new AccessDeniedException("Only ADMIN or the creator can reassign a task");
             }
@@ -87,12 +91,26 @@ public class TaskService {
             task.setAssignedTo(newAssignee);
         }
 
-        // Update fields
-        task.setTitle(request.getTitle());
-        task.setDescription(request.getDescription());
-        task.setStatus(request.getStatus());
-        task.setPriority(request.getPriority());
-        task.setDueDate(request.getDueDate());
+        // Privilege restrictions: Assignees who are neither ADMIN nor creator can only update status and description
+        if (!isAdmin && !isCreator) {
+            if (request.getTitle() != null && !Objects.equals(task.getTitle(), request.getTitle())) {
+                throw new AccessDeniedException("Assignees cannot update task title");
+            }
+            if (request.getPriority() != null && !Objects.equals(task.getPriority(), request.getPriority())) {
+                throw new AccessDeniedException("Assignees cannot update task priority");
+            }
+            if (request.getDueDate() != null && !Objects.equals(task.getDueDate(), request.getDueDate())) {
+                throw new AccessDeniedException("Assignees cannot update task due date");
+            }
+            task.setStatus(request.getStatus());
+            task.setDescription(request.getDescription());
+        } else {
+            task.setTitle(request.getTitle());
+            task.setDescription(request.getDescription());
+            task.setStatus(request.getStatus());
+            task.setPriority(request.getPriority());
+            task.setDueDate(request.getDueDate());
+        }
 
         return mapToResponse(taskRepository.save(task));
     }
@@ -101,7 +119,7 @@ public class TaskService {
         Task task = getTaskEntity(id);
 
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
-        boolean isCreator = task.getCreatedBy().getId().equals(currentUser.getId());
+        boolean isCreator = task.getCreatedBy() != null && task.getCreatedBy().getId().equals(currentUser.getId());
 
         if (!isAdmin && !isCreator) {
             throw new AccessDeniedException("Only ADMIN or the creator can delete this task");

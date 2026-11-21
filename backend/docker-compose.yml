@@ -4,11 +4,11 @@ services:
     image: postgres:15-alpine
     container_name: task-manager-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: taskdb
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgrespassword}
+      POSTGRES_DB: ${DB_NAME:-taskdb}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 

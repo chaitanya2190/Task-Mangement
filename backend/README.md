@@ -1,6 +1,6 @@
 # Task Management Web App - Backend
 
-A robust REST API for a task management system, built with **Spring Boot 3.2.x** and **Java 17**. It features JWT-based authentication, Role-Based Access Control (RBAC), and a containerized **PostgreSQL** database.
+A robust REST API for a task management system, built with **Spring Boot 3.2.x** and **Java 17**. It features JWT-based authentication, Role-Based Access Control (RBAC), Swagger/OpenAPI documentation, and a containerized **PostgreSQL** database.
 
 ---
 
@@ -9,30 +9,29 @@ A robust REST API for a task management system, built with **Spring Boot 3.2.x**
 - **Java 17**
 - **Spring Boot 3.2.x** (Web, Data JPA, Security, Validation)
 - **PostgreSQL 15** (Relational database)
+- **SpringDoc OpenAPI 2.3.x / Swagger UI** (API documentation)
 - **JWT (JSON Web Tokens)** via `jjwt` (0.11.5)
-- **Lombok** (Boilerplate reduction)
+- **Lombok & SLF4J** (Boilerplate reduction & server logging)
 - **Docker & Docker Compose** (Containerized database)
-- **JUnit 5 & Mockito** (Unit & Service testing)
+- **JUnit 5 & Mockito** (Unit, Service & Controller testing)
 
 ---
 
-## ✨ Features
+## ✨ Features & Security Constraints
 
 - **Authentication & Security:**
   - Stateless JWT token-based authentication (`SessionCreationPolicy.STATELESS`).
   - Passwords hashed using BCrypt.
-  - JWT secret loaded securely from environment variables (`.env`).
+  - Startup secret validation: `JWT_SECRET` must be at least 256 bits (32+ bytes) and blocks insecure fallbacks.
 - **Role-Based Access Control (RBAC):**
-  - **ADMIN:** Can view, manage, assign, and delete *all* tasks.
-  - **MEMBER:** Can view tasks, create tasks, and update description/status of assigned tasks.
-- **Task Assignment Logic:**
-  - On task creation (`POST`), the creator can assign the task to any user.
-  - On task update (`PUT`), only an `ADMIN` or the original task creator can reassign a task to someone else.
-- **Robust Error Handling:**
-  - Global `@RestControllerAdvice` handling 404 Not Found, 403 Forbidden, and 400 Bad Request.
-  - Field-level validation messages for invalid payloads (`@NotBlank`, `@Email`, etc.).
-- **Performance:**
-  - Pagination and filtering (by status, priority, assignee) on the `GET /api/tasks` endpoint using Spring Data JPA `Pageable`.
+  - **ADMIN:** Can view, manage, reassign, and delete *all* tasks.
+  - **MEMBER Visibility:** Members can view tasks assigned to them or created by them.
+  - **Assignee Limitations:** Assignees who are not admins or creators can only update task `status` and `description`. Changes to `title`, `priority`, `dueDate`, or `assignedTo` are denied.
+- **Robust Error Handling & Input Validation:**
+  - `GlobalExceptionHandler` masks internal exceptions (returns generic 500 error to clients) and logs stack traces on the server.
+  - Pagination validation rejects negative pages (`page < 0`) and unreasonable sizes (`size < 1` or `size > 100`) with HTTP 400 Bad Request.
+- **Idempotent Seeding:**
+  - `data.sql` executes safely on every restart using `ON CONFLICT (email) DO NOTHING` and `NOT EXISTS` checks.
 
 ---
 
@@ -44,9 +43,14 @@ A robust REST API for a task management system, built with **Spring Boot 3.2.x**
 - Docker & Docker Compose
 
 ### 1. Configure the Environment
-A `.env` file is located inside the `backend/` directory to store sensitive environment variables:
+Create or edit `.env` inside `backend/` (see `.env.example`):
 ```properties
 JWT_SECRET=this-is-a-super-secret-key-that-should-be-at-least-256-bits-long-in-production-environments-for-jwt-signing
+DB_URL=jdbc:postgresql://localhost:5432/taskdb
+DB_USERNAME=postgres
+DB_PASSWORD=postgrespassword
+DB_NAME=taskdb
+DB_PORT=5432
 ```
 
 ### 2. Start the Database
@@ -54,7 +58,7 @@ Spin up the local PostgreSQL container using Docker Compose:
 ```bash
 docker-compose up -d
 ```
-*This exposes PostgreSQL on `localhost:5432` with database `taskdb`, username `postgres`, and password `postgrespassword`.*
+*Exposes PostgreSQL on `localhost:5432` with database `taskdb`.*
 
 ### 3. Run the Application
 Start the Spring Boot server using Maven:
@@ -63,10 +67,12 @@ mvn spring-boot:run
 ```
 *The API will start on `http://localhost:8080`.*
 
-### 4. Database Seeding (Testing Data)
-The application automatically executes `data.sql` on startup, seeding the database with dummy users and tasks for immediate testing.
+### 4. Interactive Swagger Documentation
+Open in your browser:
+- [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 
-**Pre-configured Users:**
+### 5. Database Seeding (Testing Data)
+Seeded with:
 - **Admin**: `admin@test.com` | password: `password`
 - **Member**: `member@test.com` | password: `password`
 
@@ -74,19 +80,19 @@ The application automatically executes `data.sql` on startup, seeding the databa
 
 ## 📡 API Endpoints
 
-### Auth
+### Auth (`/api/auth`)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/auth/register` | Register a new user |
 | `POST` | `/api/auth/login` | Authenticate and retrieve JWT token |
 
-### Tasks (Requires Bearer Token)
+### Tasks (`/api/tasks`)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/tasks` | Get paginated & filtered tasks (`?page=0&size=10&status=TODO`) |
+| `GET` | `/api/tasks` | Get paginated & filtered tasks (`?page=0&size=10&status=TODO&priority=HIGH`) |
 | `GET` | `/api/tasks/{id}` | Get task details by ID |
 | `POST` | `/api/tasks` | Create a new task (Creator can assign) |
-| `PUT` | `/api/tasks/{id}` | Update task (ADMIN/Creator can reassign) |
+| `PUT` | `/api/tasks/{id}` | Update task (ADMIN/Creator can update all; Assignee can update status/desc) |
 | `DELETE` | `/api/tasks/{id}` | Delete task (ADMIN/Creator only) |
 
 ---

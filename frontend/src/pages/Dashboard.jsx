@@ -1,11 +1,11 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import Navbar from '../components/Navbar';
 import FilterBar from '../components/FilterBar';
 import TaskCard from '../components/TaskCard';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import TaskForm from '../components/TaskForm';
-import { TaskProvider, TaskContext } from '../context/TaskContext';
+import { TaskProvider } from '../context/TaskContext';
 import { useTasks } from '../hooks/useTasks';
 import { useAuth } from '../hooks/useAuth';
 
