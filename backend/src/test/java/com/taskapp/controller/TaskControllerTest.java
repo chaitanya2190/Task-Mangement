@@ -1,6 +1,5 @@
 package com.taskapp.controller;
 
-import com.taskapp.dto.TaskPatchRequest;
 import com.taskapp.dto.TaskResponse;
 import com.taskapp.exception.GlobalExceptionHandler;
 import com.taskapp.model.Role;
@@ -8,13 +7,16 @@ import com.taskapp.model.TaskStatus;
 import com.taskapp.model.User;
 import com.taskapp.service.TaskService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.openapitools.jackson.nullable.JsonNullableModule;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -44,8 +46,12 @@ class TaskControllerTest {
     void setUp() {
         admin = User.builder().id(1L).email("admin@test.com").role(Role.ADMIN).build();
         objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JsonNullableModule());
+        objectMapper.registerModule(new JavaTimeModule());
+
         mockMvc = MockMvcBuilders.standaloneSetup(taskController)
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }
 
@@ -80,11 +86,8 @@ class TaskControllerTest {
     }
 
     @Test
-    void patchTask_SuccessfulPartialUpdate() throws Exception {
-        TaskPatchRequest patchRequest = TaskPatchRequest.builder()
-                .status(TaskStatus.DONE)
-                .description("Patched status only")
-                .build();
+    void patchTask_SuccessfulPartialUpdate_WithOmittedFields() throws Exception {
+        String jsonPayload = "{\"status\": \"DONE\", \"description\": \"Patched status only\"}";
 
         TaskResponse response = TaskResponse.builder()
                 .id(1L)
@@ -97,10 +100,49 @@ class TaskControllerTest {
 
         mockMvc.perform(patch("/api/tasks/1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(patchRequest)))
+                        .content(jsonPayload))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("DONE"))
                 .andExpect(jsonPath("$.description").value("Patched status only"));
+    }
+
+    @Test
+    void patchTask_SuccessfulExplicitNullDueDate() throws Exception {
+        String jsonPayload = "{\"dueDate\": null}";
+
+        TaskResponse response = TaskResponse.builder()
+                .id(1L)
+                .title("Original Title")
+                .dueDate(null)
+                .build();
+
+        when(taskService.patchTask(eq(1L), any(), any())).thenReturn(response);
+
+        mockMvc.perform(patch("/api/tasks/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dueDate").doesNotExist());
+    }
+
+    @Test
+    void patchTask_EmptyTitle_ReturnsBadRequestDueToValidation() throws Exception {
+        String jsonPayload = "{\"title\": \"\"}";
+
+        mockMvc.perform(patch("/api/tasks/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void patchTask_NullStatus_ReturnsBadRequestDueToValidation() throws Exception {
+        String jsonPayload = "{\"status\": null}";
+
+        mockMvc.perform(patch("/api/tasks/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

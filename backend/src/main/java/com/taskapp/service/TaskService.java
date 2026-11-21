@@ -18,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Service
@@ -127,48 +128,71 @@ public class TaskService {
             throw new AccessDeniedException("You do not have permission to update this task");
         }
 
-        // Reassignment logic
-        if (request.getAssignedToId() != null && !Objects.equals(task.getAssignedTo() != null ? task.getAssignedTo().getId() : null, request.getAssignedToId())) {
-            if (!isAdmin && !isCreator) {
-                throw new AccessDeniedException("Only ADMIN or the creator can reassign a task");
+        // Reassignment logic: Only ADMIN or creator can change assignedTo
+        if (request.getAssignedToId() != null && request.getAssignedToId().isPresent()) {
+            Long newAssignedToId = request.getAssignedToId().get();
+            Long currentAssignedToId = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
+            if (!Objects.equals(currentAssignedToId, newAssignedToId)) {
+                if (!isAdmin && !isCreator) {
+                    throw new AccessDeniedException("Only ADMIN or the creator can reassign a task");
+                }
+                if (newAssignedToId != null) {
+                    User newAssignee = userRepository.findById(newAssignedToId)
+                            .orElseThrow(() -> new ResourceNotFoundException("Assignee not found with id: " + newAssignedToId));
+                    task.setAssignedTo(newAssignee);
+                } else {
+                    task.setAssignedTo(null); // Explicit null clears assignee
+                }
             }
-            User newAssignee = userRepository.findById(request.getAssignedToId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Assignee not found"));
-            task.setAssignedTo(newAssignee);
         }
 
         // Field modifications
         if (!isAdmin && !isCreator) {
-            if (request.getTitle() != null && !Objects.equals(task.getTitle(), request.getTitle())) {
-                throw new AccessDeniedException("Assignees cannot update task title");
+            // Assignees can only update status and description
+            if (request.getTitle() != null && request.getTitle().isPresent()) {
+                String newTitle = request.getTitle().get();
+                if (!Objects.equals(task.getTitle(), newTitle)) {
+                    throw new AccessDeniedException("Assignees cannot update task title");
+                }
             }
-            if (request.getPriority() != null && !Objects.equals(task.getPriority(), request.getPriority())) {
-                throw new AccessDeniedException("Assignees cannot update task priority");
+            if (request.getPriority() != null && request.getPriority().isPresent()) {
+                TaskPriority newPriority = request.getPriority().get();
+                if (!Objects.equals(task.getPriority(), newPriority)) {
+                    throw new AccessDeniedException("Assignees cannot update task priority");
+                }
             }
-            if (request.getDueDate() != null && !Objects.equals(task.getDueDate(), request.getDueDate())) {
-                throw new AccessDeniedException("Assignees cannot update task due date");
+            if (request.getDueDate() != null && request.getDueDate().isPresent()) {
+                LocalDateTime newDueDate = request.getDueDate().get();
+                if (!Objects.equals(task.getDueDate(), newDueDate)) {
+                    throw new AccessDeniedException("Assignees cannot update task due date");
+                }
             }
-            if (request.getStatus() != null) {
-                task.setStatus(request.getStatus());
+
+            // Update status if provided
+            if (request.getStatus() != null && request.getStatus().isPresent()) {
+                task.setStatus(request.getStatus().get());
             }
-            if (request.getDescription() != null) {
-                task.setDescription(request.getDescription());
+
+            // Update description if provided (can be text or null to clear)
+            if (request.getDescription() != null && request.getDescription().isPresent()) {
+                task.setDescription(request.getDescription().get());
             }
         } else {
-            if (request.getTitle() != null) {
-                task.setTitle(request.getTitle());
+            // Admin or Creator can update any field
+            if (request.getTitle() != null && request.getTitle().isPresent()) {
+                task.setTitle(request.getTitle().get());
             }
-            if (request.getDescription() != null) {
-                task.setDescription(request.getDescription());
+            if (request.getDescription() != null && request.getDescription().isPresent()) {
+                task.setDescription(request.getDescription().get());
             }
-            if (request.getStatus() != null) {
-                task.setStatus(request.getStatus());
+            if (request.getStatus() != null && request.getStatus().isPresent()) {
+                task.setStatus(request.getStatus().get());
             }
-            if (request.getPriority() != null) {
-                task.setPriority(request.getPriority());
+            if (request.getPriority() != null && request.getPriority().isPresent()) {
+                task.setPriority(request.getPriority().get());
             }
-            if (request.getDueDate() != null) {
-                task.setDueDate(request.getDueDate());
+            if (request.getDueDate() != null && request.getDueDate().isPresent()) {
+                task.setDueDate(request.getDueDate().get()); // Sets value or clears to null if explicitly null
             }
         }
 

@@ -112,6 +112,13 @@
             <version>4.0.0</version>
         </dependency>
 
+        <!-- Jackson Databind Nullable for RFC 7396 / PATCH field tracking -->
+        <dependency>
+            <groupId>org.openapitools</groupId>
+            <artifactId>jackson-databind-nullable</artifactId>
+            <version>0.2.6</version>
+        </dependency>
+
         <!-- OpenAPI 3 / Swagger Documentation -->
         <dependency>
             <groupId>org.springdoc</groupId>

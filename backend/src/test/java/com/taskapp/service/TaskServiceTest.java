@@ -16,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -225,8 +226,8 @@ class TaskServiceTest {
     @Test
     void patchTask_AssigneeCanPatchOnlyStatusAndDescriptionWithoutOtherFields() {
         TaskPatchRequest patch = TaskPatchRequest.builder()
-                .status(TaskStatus.DONE)
-                .description("Patched description")
+                .status(JsonNullable.of(TaskStatus.DONE))
+                .description(JsonNullable.of("Patched description"))
                 .build();
 
         when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
@@ -238,12 +239,43 @@ class TaskServiceTest {
         assertEquals("Patched description", response.getDescription());
         assertEquals("Task 1", response.getTitle()); // unchanged
         assertEquals(TaskPriority.HIGH, response.getPriority()); // unchanged
+        assertEquals(LocalDateTime.of(2026, 12, 1, 10, 0), response.getDueDate()); // unchanged
+    }
+
+    @Test
+    void patchTask_AdminCanClearDueDateBySendingExplicitNull() {
+        TaskPatchRequest patch = TaskPatchRequest.builder()
+                .dueDate(JsonNullable.of(null)) // Explicitly clearing dueDate
+                .build();
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponse response = taskService.patchTask(100L, patch, admin);
+
+        assertNull(response.getDueDate(), "Explicit null in patch request must clear dueDate");
+        assertEquals("Task 1", response.getTitle(), "Omitted title must remain unchanged");
+    }
+
+    @Test
+    void patchTask_DueDateOmittedPreservesExistingDueDate() {
+        TaskPatchRequest patch = TaskPatchRequest.builder()
+                .status(JsonNullable.of(TaskStatus.DONE))
+                // dueDate is JsonNullable.undefined() by default
+                .build();
+
+        when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponse response = taskService.patchTask(100L, patch, admin);
+
+        assertEquals(LocalDateTime.of(2026, 12, 1, 10, 0), response.getDueDate(), "Omitted dueDate must remain intact");
     }
 
     @Test
     void patchTask_AssigneeCannotPatchPriority() {
         TaskPatchRequest patch = TaskPatchRequest.builder()
-                .priority(TaskPriority.LOW)
+                .priority(JsonNullable.of(TaskPriority.LOW))
                 .build();
 
         when(taskRepository.findById(100L)).thenReturn(Optional.of(task1));

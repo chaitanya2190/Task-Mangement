@@ -78,7 +78,7 @@ public class TaskController {
     @PatchMapping("/{id}")
     public ResponseEntity<TaskResponse> patchTask(
             @PathVariable Long id,
-            @RequestBody TaskPatchRequest request,
+            @Valid @RequestBody TaskPatchRequest request,
             @AuthenticationPrincipal User currentUser
     ) {
         return ResponseEntity.ok(taskService.patchTask(id, request, currentUser));
